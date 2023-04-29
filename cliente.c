@@ -62,10 +62,10 @@ int main(int argc, char *argv[]) {
     }
 
     /* Receives the presentation message from the server */
-    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
-        buffer_in[slen + 1] = '\0';
-        fprintf(stdout, "Server says: %s\n", buffer_in);
-    }
+//    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
+//        buffer_in[slen + 1] = '\0';
+//        fprintf(stdout, "Server says: %s\n", buffer_in);
+//    }
 
     /*
      * Communicate with the server until the exit message come
