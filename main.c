@@ -22,9 +22,60 @@
 
 char buffer[BUFFER_LENGTH];
 
+
+char *msg_cliente(char buffer[BUFFER_LENGTH]) {
+    char *msg;
+    char *aux = strtok(buffer, "|");
+    int count = 1;
+
+    while(strcmp(aux, "eom") != 0)
+    {
+        if(count == 2) {
+            if(strcmp(aux, "usuario_entra") == 0) {
+                count ++;
+                aux=strtok(NULL, "|");
+                msg = aux;
+            }
+        } else{
+            count ++;
+            aux=strtok(NULL, "|");
+        }
+    }
+    return &(*msg);
+}
+
+char *gerar_string(char subString[BUFFER_LENGTH]) {
+
+    char *aux = (char *)malloc(sizeof(char) * BUFFER_LENGTH);
+
+    strcat(aux,"bom|msg_servidor|");
+    strcat(aux, subString);
+    strcat(aux, "|eom");
+
+    printf("%s\n", aux);
+
+    return &(*aux);
+}
+
+char *apelito_texto(char apelido[BUFFER_LENGTH]) {
+    char *aux = (char *)malloc(sizeof(char) * BUFFER_LENGTH);
+
+
+    strcat(aux, "Usuario ");
+    strcat(aux, apelido);
+    strcat(aux, " entrou");
+
+
+
+    return &(*aux);
+}
+
 void *myThread(void *ptr ) {
 
     int client = *(int *)ptr;
+
+
+
 
     fprintf(stdout, "Client [%d] connected.\nWaiting for message ...\n",client);
 
@@ -42,7 +93,6 @@ void *myThread(void *ptr ) {
             /* 'bye' message finishes the connection */
             if(strcmp(buffer, "bye") == 0) {
                 send(client,"bom|msg_servidor|bye!|eom\0", BUFFER_LENGTH, 0);
-//                break;
             } else {
                 send(client, "bom|msg_servidor|yep!|eom\0", BUFFER_LENGTH, 0);
             }
@@ -134,6 +184,15 @@ int main(void) {
         //      inicio zona de conflito
         strncpy(buffer, "bom|msg_servidor|Olá! Seja bem-vindo!|eom\0", BUFFER_LENGTH);
         send(clientfd, buffer, BUFFER_LENGTH, 0);
+
+        recv(clientfd, buffer, BUFFER_LENGTH, 0);
+
+        //refazer tem que escrever no buffer, criar uma thread que manda para toda. Somente le;
+
+        char *apelido = apelito_texto(msg_cliente(buffer));
+        printf("---%s\n", apelido);
+        char *send_texto = gerar_string(apelido);
+        send(clientfd,send_texto , BUFFER_LENGTH, 0);
 
         //      final zona de conflito
         pthread_create(&thread, NULL, myThread, socket_ptr);

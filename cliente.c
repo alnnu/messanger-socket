@@ -26,25 +26,25 @@
 
 
 char *msg_servidor(char buffer[LEN]) {
-
+    char *msg;
     char *aux = strtok(buffer, "|");
     int count = 1;
 
-    while(count != 4)
+    while(strcmp(aux, "eom") != 0)
     {
         if(count == 2) {
             if(strcmp(aux, "msg_servidor") == 0) {
                 count ++;
                 aux=strtok(NULL, "|");
                 fprintf(stdout, "Server says: %s\n", aux);
-                break;
+                msg = aux;
             }
+        } else{
+            count ++;
+            aux=strtok(NULL, "|");
         }
-        count ++;
-
-        aux=strtok(NULL, "|");
     }
-    return &(*aux);
+    return &(*msg);
 }
 
 /*
@@ -92,6 +92,12 @@ int main(int argc, char *argv[]) {
     if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
         msg_servidor(buffer_in);
     }
+
+    send(sockfd, "bom|usuario_entra|luann|eom", LEN, 0);
+
+    recv(sockfd, buffer_in, LEN, 0);
+
+    msg_servidor(buffer_in);
     /*
      * Communicate with the server until the exit message come
      */
