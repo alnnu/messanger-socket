@@ -93,7 +93,23 @@ int main(int argc, char *argv[]) {
         msg_servidor(buffer_in);
     }
 
-    send(sockfd, "bom|usuario_entra|luann|eom", LEN, 0);
+    memset(buffer_out, 0x0, 8);
+    fprintf(stdout, "apelido: ");
+    fgets(buffer_out, LEN, stdin);
+
+    buffer_out[strlen(buffer_out) - 1] = '\0';
+
+    char *aux = (char *)malloc(sizeof(char) * LEN);
+
+    strcat(aux,"bom|usuario_entra|");
+    strcat(aux, buffer_out);
+    strcat(aux, "|eom");
+
+    strcpy(buffer_out, aux);
+    free(aux);
+
+
+    send(sockfd, buffer_out, LEN, 0);
 
     recv(sockfd, buffer_in, LEN, 0);
 
