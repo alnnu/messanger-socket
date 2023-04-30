@@ -7,9 +7,13 @@
 #include <stdbool.h>
 
 #include <sys/types.h>
+
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+
 
 /* Defines the server port */
 #define PORT 4242
@@ -19,6 +23,29 @@
 
 /* Server address */
 #define SERVER_ADDR "127.0.0.1"			//o cliente se conecta automaticamente ao servidor no host local (localhost) na porta 4242
+
+
+char *msg_servidor(char buffer[LEN]) {
+
+    char *aux = strtok(buffer, "|");
+    int count = 1;
+
+    while(count != 4)
+    {
+        if(count == 2) {
+            if(strcmp(aux, "msg_servidor") == 0) {
+                count ++;
+                aux=strtok(NULL, "|");
+                fprintf(stdout, "Server says: %s\n", aux);
+                break;
+            }
+        }
+        count ++;
+
+        aux=strtok(NULL, "|");
+    }
+    return &(*aux);
+}
 
 /*
  * Main execution of the client program of our simple protocol
@@ -52,7 +79,6 @@ int main(int argc, char *argv[]) {
     /* Defines the connection properties */
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
-    server.sin_addr.s_addr = inet_addr(SERVER_ADDR);
     memset(server.sin_zero, 0x0, 8);
 
     /* Tries to connect to the server */
@@ -62,15 +88,16 @@ int main(int argc, char *argv[]) {
     }
 
     /* Receives the presentation message from the server */
-//    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
-//        buffer_in[slen + 1] = '\0';
-//        fprintf(stdout, "Server says: %s\n", buffer_in);
-//    }
 
+    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
+        msg_servidor(buffer_in);
+    }
     /*
      * Communicate with the server until the exit message come
      */
     while (true) {
+        /* Receives an answer from the server */
+
 
         /* Zeroing the buffers */
         memset(buffer_in, 0x0, LEN);
@@ -82,12 +109,13 @@ int main(int argc, char *argv[]) {
         /* Sends the read message to the server through the socket */
         send(sockfd, buffer_out, strlen(buffer_out), 0);
 
-        /* Receives an answer from the server */
         slen = recv(sockfd, buffer_in, LEN, 0);
-        printf("Server answer: %s\n", buffer_in);
+
+        strcpy(buffer_in, msg_servidor(buffer_in));
 
         /* 'bye' message finishes the connection */
-        if(strcmp(buffer_in, "bye") == 0)
+
+        if(strcmp(buffer_in, "bye!") == 0)
             break;
     }
 

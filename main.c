@@ -6,9 +6,12 @@
 #include <errno.h>
 
 #include <sys/types.h>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+
+
 #include <pthread.h>
 
 /* Server port  */
@@ -17,33 +20,34 @@
 /* Buffer length */
 #define BUFFER_LENGTH 4096
 
+char buffer[BUFFER_LENGTH];
 
 void *myThread(void *ptr ) {
-    char buffer[BUFFER_LENGTH];
+
     int client = *(int *)ptr;
 
     fprintf(stdout, "Client [%d] connected.\nWaiting for message ...\n",client);
 
         do {
-
             memset(buffer, 0x0, BUFFER_LENGTH);
             /* Receives client message */
             int message_len;
             if((message_len = recv(client, buffer, BUFFER_LENGTH, 0)) > 0) {
                 buffer[message_len - 1] = '\0';
-                printf("Client says: %s\n", buffer);
+                printf("Client says[%d]: %s\n",client, buffer);
             }
 
-            printf("Client says[%d]: %s\n",client, buffer);
+
 
             /* 'bye' message finishes the connection */
             if(strcmp(buffer, "bye") == 0) {
-                send(client, "bye", 3, 0);
+                send(client,"bom|msg_servidor|bye!|eom\0", BUFFER_LENGTH, 0);
+//                break;
             } else {
-                send(client, "yep\n", 4, 0);
+                send(client, "bom|msg_servidor|yep!|eom\0", BUFFER_LENGTH, 0);
             }
 
-        } while(strcmp(buffer, "bye"));
+        } while(strcmp(buffer, "bye") != 0);
 
 
     close(client);
@@ -120,9 +124,18 @@ int main(void) {
             perror("Accept error:");
             return EXIT_FAILURE;
         }
+
+
+
         int *socket_ptr = malloc(sizeof(int));
         *socket_ptr = clientfd;
         pthread_t thread;
+
+        //      inicio zona de conflito
+        strncpy(buffer, "bom|msg_servidor|Olá! Seja bem-vindo!|eom\0", BUFFER_LENGTH);
+        send(clientfd, buffer, BUFFER_LENGTH, 0);
+
+        //      final zona de conflito
         pthread_create(&thread, NULL, myThread, socket_ptr);
     }
 
