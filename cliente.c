@@ -7,13 +7,9 @@
 #include <stdbool.h>
 
 #include <sys/types.h>
-
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-
 
 /* Defines the server port */
 #define PORT 4242
@@ -21,13 +17,24 @@
 /* Sockets buffers length */
 #define LEN 4096
 
+#include <pthread.h>
+
 /* Server address */
 #define SERVER_ADDR "127.0.0.1"			//o cliente se conecta automaticamente ao servidor no host local (localhost) na porta 4242
 
+/*
+ * Main execution of the client program of our simple protocol
+ */
 
-char *msg_servidor(char buffer[LEN]) {
-    char *msg;
-    char *aux = strtok(buffer, "|");
+/* Receive buffer */
+char buffer_in[LEN];
+/* Send buffer */
+char buffer_out[LEN];
+
+
+char *msg_server_decoder(char *msg) {
+    char *msg_return = (char*) malloc(sizeof (char) * LEN);
+    char *aux = strtok(msg, "|");
     int count = 1;
 
     while(strcmp(aux, "eom") != 0)
@@ -36,21 +43,47 @@ char *msg_servidor(char buffer[LEN]) {
             if(strcmp(aux, "msg_servidor") == 0) {
                 count ++;
                 aux=strtok(NULL, "|");
-                fprintf(stdout, "Server says: %s\n", aux);
-                msg = aux;
+                msg_return = aux;
             }
         } else{
             count ++;
             aux=strtok(NULL, "|");
         }
     }
-    return &(*msg);
+    return msg_return;
 }
 
-/*
- * Main execution of the client program of our simple protocol
- */
+void *buffer_in_listner(void *ptr) {
+    int server = *(int*)ptr;
+    char *msg = (char*) malloc(sizeof(char) * LEN);
+    while (1){
+        recv(server, msg, LEN, 0);
+        strcpy(buffer_in, msg_server_decoder(msg));
+        printf("%s\n", buffer_in);
+        if(strcmp(buffer_in, "bye!") == 0){
+            break;
+        }
+    }
+
+
+    /* Communicates with the client until bye message come */
+    pthread_exit(NULL);
+}
+
+char *make_msg(char *type, char *text) {
+    char *msg = (char*) malloc(sizeof(char) * LEN);
+
+    strcat(msg,"bom|");
+    strcat(msg,type);
+    strcat(msg, "|");
+    strcat(msg, text);
+    strcat(msg, "|eom");
+
+    return msg;
+}
+
 int main(int argc, char *argv[]) {
+    char apelido[100];
 
     /* Server socket */
     struct sockaddr_in server;
@@ -60,10 +93,7 @@ int main(int argc, char *argv[]) {
     int len = sizeof(server);
     int slen;
 
-    /* Receive buffer */
-    char buffer_in[LEN];
-    /* Send buffer */
-    char buffer_out[LEN];
+
 
     fprintf(stdout, "Starting Client ...\n");
 
@@ -79,6 +109,7 @@ int main(int argc, char *argv[]) {
     /* Defines the connection properties */
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = inet_addr(SERVER_ADDR);
     memset(server.sin_zero, 0x0, 8);
 
     /* Tries to connect to the server */
@@ -88,56 +119,55 @@ int main(int argc, char *argv[]) {
     }
 
     /* Receives the presentation message from the server */
-
     if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
-        msg_servidor(buffer_in);
+        buffer_in[slen + 1] = '\0';
+        fprintf(stdout, "Server says: %s\n", msg_server_decoder(buffer_in));
     }
 
-    memset(buffer_out, 0x0, 8);
     fprintf(stdout, "apelido: ");
-    fgets(buffer_out, LEN, stdin);
+    fgets(apelido, 100, stdin);
 
-    buffer_out[strlen(buffer_out) - 1] = '\0';
+    //remover o enter
+    apelido[strlen(apelido) - 1] = '\0';
 
-    char *aux = (char *)malloc(sizeof(char) * LEN);
-
-    strcat(aux,"bom|usuario_entra|");
-    strcat(aux, buffer_out);
-    strcat(aux, "|eom");
-
-    strcpy(buffer_out, aux);
-    free(aux);
+    strcpy(buffer_out,apelido);
 
 
-    send(sockfd, buffer_out, LEN, 0);
+    /* Sends the read message to the server through the socket */
+    send(sockfd, make_msg("usuario_entra", buffer_out), LEN, 0);
 
-    recv(sockfd, buffer_in, LEN, 0);
-
-    msg_servidor(buffer_in);
     /*
      * Communicate with the server until the exit message come
      */
-    while (true) {
-        /* Receives an answer from the server */
 
+    int *socket_ptr = malloc(sizeof(int));
+    *socket_ptr = sockfd;
+
+    pthread_t thread;
+
+
+    pthread_create(&thread, NULL, buffer_in_listner, socket_ptr);
+    fprintf(stdout, "Say something to the server:\n");
+
+    while (true) {
 
         /* Zeroing the buffers */
         memset(buffer_in, 0x0, LEN);
         memset(buffer_out, 0x0, LEN);
 
-        fprintf(stdout, "Say something to the server: ");
         fgets(buffer_out, LEN, stdin);
+        buffer_out[strlen(buffer_out) - 1] = '\0';
 
         /* Sends the read message to the server through the socket */
-        send(sockfd, buffer_out, strlen(buffer_out), 0);
+        if(strcmp(buffer_out, "bye") == 0){
+            send(sockfd, make_msg("usuario_sai",apelido), LEN, 0);
 
-        slen = recv(sockfd, buffer_in, LEN, 0);
-
-        strcpy(buffer_in, msg_servidor(buffer_in));
+        } else {
+            send(sockfd,  make_msg("msg_cliente",buffer_out), LEN, 0);
+        }
 
         /* 'bye' message finishes the connection */
-
-        if(strcmp(buffer_in, "bye!") == 0)
+        if(strcmp(buffer_out, "bye") == 0)
             break;
     }
 

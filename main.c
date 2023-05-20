@@ -1,4 +1,4 @@
-//Código para compilar e executar: g++ -pthread servidor.cpp -o servidor && ./servidor
+//CÃ³digo para compilar e executar: g++ -pthread servidor.cpp -o servidor && ./servidor
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -6,13 +6,19 @@
 #include <errno.h>
 
 #include <sys/types.h>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-
-
 #include <pthread.h>
+#include <semaphore.h>
+
+#include "clients.h"
+
+
+sem_t semaforoProdutor, semaforoConsumidor, mudex;
+
+Lista* clients;
+
 
 /* Server port  */
 #define PORT 4242
@@ -23,94 +29,170 @@
 char buffer[BUFFER_LENGTH];
 
 
-char *msg_cliente(char buffer[BUFFER_LENGTH]) {
+struct infos{
+    char *tipo;
+    char *info;
     char *msg;
-    char *aux = strtok(buffer, "|");
+};
+/*
+ * Thread para os clientes(produtora)
+ */
+
+
+
+struct infos msg_client_decoder(char *msg, char *apelido) {
+
+    struct infos dados;
+    char *aux = strtok(msg, "|");
     int count = 1;
 
     while(strcmp(aux, "eom") != 0)
     {
         if(count == 2) {
-            if(strcmp(aux, "usuario_entra") == 0) {
+            if(strcmp(aux, "usuario_entra") == 0 ) {
+                dados.tipo = aux;
                 count ++;
                 aux=strtok(NULL, "|");
-                msg = aux;
+                dados.info = aux;
+
+                dados.msg = (char*) malloc((sizeof(char) * BUFFER_LENGTH));
+                strcat(dados.msg, "usuario ");
+                strcat(dados.msg, aux);
+                strcat(dados.msg, " entrou");
+            } else if(strcmp(aux, "usuario_sai") == 0){
+                dados.tipo = aux;
+                count ++;
+                aux=strtok(NULL, "|");
+                dados.info = aux;
+
+                dados.msg = (char*) malloc((sizeof(char) * BUFFER_LENGTH));
+                strcat(dados.msg, "usuario ");
+                strcat(dados.msg, aux);
+                strcat(dados.msg, "saiu");
+            } else if(strcmp(aux, "msg_cliente") == 0) {
+                dados.tipo = aux;
+                count ++;
+                aux=strtok(NULL, "|");
+                dados.info = aux;
+
+                dados.msg = (char*) malloc((sizeof(char) * BUFFER_LENGTH));
+                strcat(dados.msg, apelido);
+                strcat(dados.msg, " falou: ");
+                strcat(dados.msg, aux);
             }
         } else{
             count ++;
             aux=strtok(NULL, "|");
         }
     }
-    return &(*msg);
+    return dados;
 }
 
-char *gerar_string(char subString[BUFFER_LENGTH]) {
 
-    char *aux = (char *)malloc(sizeof(char) * BUFFER_LENGTH);
+char *make_msg(char *type, char *text) {
+    char *msg = (char*) malloc(sizeof(char) * BUFFER_LENGTH);
 
-    strcat(aux,"bom|msg_servidor|");
-    strcat(aux, subString);
-    strcat(aux, "|eom");
+    strcat(msg,"bom|");
+    strcat(msg,type);
+    strcat(msg, "|");
+    strcat(msg, text);
+    strcat(msg, "|eom");
 
-    printf("%s\n", aux);
-
-    return &(*aux);
+    return msg;
 }
 
-char *apelito_texto(char apelido[BUFFER_LENGTH]) {
-    char *aux = (char *)malloc(sizeof(char) * BUFFER_LENGTH);
-
-
-    strcat(aux, "Usuario ");
-    strcat(aux, apelido);
-    strcat(aux, " entrou");
-
-
-
-    return &(*aux);
-}
 
 void *myThread(void *ptr ) {
 
     int client = *(int *)ptr;
+    char *client_apelido;
+    struct infos msg_dados;
+
+    char *msg = (char*)malloc(sizeof (char) * BUFFER_LENGTH);
+
+    int message_len;
 
 
+    sem_wait(&mudex);
+    strncpy(buffer, "Olá! Seja bem-vindo!\0", BUFFER_LENGTH);
+
+    send(client, make_msg("msg_servidor",buffer), BUFFER_LENGTH, 0);
+
+    sem_post(&mudex);
+
+    sem_post(&semaforoProdutor);
+
+    message_len = recv(client, msg, BUFFER_LENGTH, 0);
 
 
-    fprintf(stdout, "Client [%d] connected.\nWaiting for message ...\n",client);
+    sem_wait(&mudex);
+    msg_dados = msg_client_decoder(msg,NULL);
+    strncpy(buffer, msg_dados.msg, BUFFER_LENGTH);
 
-        do {
-            memset(buffer, 0x0, BUFFER_LENGTH);
-            /* Receives client message */
-            int message_len;
-            if((message_len = recv(client, buffer, BUFFER_LENGTH, 0)) > 0) {
-                buffer[message_len - 1] = '\0';
-                printf("Client says[%d]: %s\n",client, buffer);
-            }
+    add(client, msg_dados.info);
+    client_apelido = (char *) malloc(sizeof (char) * strlen(msg_dados.info));
+    strcpy(client_apelido, msg_dados.info);
 
+    sem_post(&mudex);
 
+    while (1) {
+        while(strlen(buffer) == BUFFER_LENGTH){
+            fprintf(stdout,"Produtor -- o buffer está cheio! A produção está em espera!\n");
+            sem_wait(&semaforoConsumidor);
+            fprintf(stdout,"Produtor -- a produção voltou a funcionar!\n");
+        }
+        /* Receives client message */
+
+        if((message_len = recv(client, msg, BUFFER_LENGTH, 0)) > 0) {
+
+            sem_wait(&mudex);
+            msg_dados = msg_client_decoder(msg, client_apelido);
+
+            strcpy(buffer, msg_dados.msg);
+
+            buffer[message_len - 1] = '\0';
+
+            fprintf(stdout,"from client: %s", buffer);
 
             /* 'bye' message finishes the connection */
-            if(strcmp(buffer, "bye") == 0) {
-                send(client,"bom|msg_servidor|bye!|eom\0", BUFFER_LENGTH, 0);
+            if(strcmp(msg_dados.tipo, "usuario_sai") == 0) {
+                send(client,make_msg("msg_servidor", "bye!"), BUFFER_LENGTH, 0);
+                sem_post(&mudex);
+
+                sem_post(&semaforoProdutor);
+                break;
             } else {
-                send(client, "bom|msg_servidor|yep!|eom\0", BUFFER_LENGTH, 0);
+                send(client, make_msg("msg_servidor",buffer), BUFFER_LENGTH, 0);
+
             }
 
-        } while(strcmp(buffer, "bye") != 0);
+            sem_post(&mudex);
+            sem_post(&semaforoProdutor);
+
+        }
+    }
 
 
     close(client);
     free(ptr);
+    free(msg);
+    remover(client);
 
     /* Communicates with the client until bye message come */
     pthread_exit(NULL);
 }
 
+
 /*
  * Main execution of the server program of the simple protocol
  */
+
 int main(void) {
+    clients = create_clients_list();
+
+    sem_init(&semaforoProdutor, 0, 0);
+    sem_init(&semaforoConsumidor, 0, 0);
+    sem_init(&mudex, 0, 1);
 
     /* Client and Server socket structures */
     struct sockaddr_in client, server;
@@ -118,6 +200,9 @@ int main(void) {
     /* File descriptors of client and server */
     int serverfd, clientfd;
 
+
+
+    //greet message
 
 
     fprintf(stdout, "Starting server\n");
@@ -135,17 +220,16 @@ int main(void) {
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(PORT);
+
     memset(server.sin_zero, 0x0, 8);
 
     /* Handle the error of the port already in use */
     int yes = 1;
     if(setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR,
-                  &yes, sizeof(yes)) == -1) {
+                  &yes, sizeof(int)) == -1) {
         perror("Socket options error:");
         return EXIT_FAILURE;
     }
-
-
 
     /* bind the socket to a port */
     if(bind(serverfd, (struct sockaddr*)&server, sizeof(server)) == -1 ) {
@@ -158,53 +242,33 @@ int main(void) {
         perror("Listen error:");
         return EXIT_FAILURE;
     }
-    fprintf(stdout, "Listening on port %d\n", PORT);
 
 
-
-//    /* Copies into buffer our welcome message */
-//    strcpy(buffer, "Hello, client!\n\0");
-
-    /* Sends the message to the client */
     socklen_t client_len = sizeof(client);
-    while (1) {
-        clientfd=accept(serverfd,(struct sockaddr *) &client, &client_len );
+    while(1){
 
+        clientfd=accept(serverfd,(struct sockaddr *) &client, &client_len);
         if (clientfd == -1) {
             perror("Accept error:");
             return EXIT_FAILURE;
         }
 
-
-
         int *socket_ptr = malloc(sizeof(int));
         *socket_ptr = clientfd;
+
         pthread_t thread;
 
-        //      inicio zona de conflito
-        strncpy(buffer, "bom|msg_servidor|Olá! Seja bem-vindo!|eom\0", BUFFER_LENGTH);
-        send(clientfd, buffer, BUFFER_LENGTH, 0);
 
-        recv(clientfd, buffer, BUFFER_LENGTH, 0);
-
-        //refazer tem que escrever no buffer, criar uma thread que manda para toda. Somente le;
-
-        char *apelido = apelito_texto(msg_cliente(buffer));
-        printf("---%s\n", apelido);
-        char *send_texto = gerar_string(apelido);
-        send(clientfd,send_texto , BUFFER_LENGTH, 0);
-
-        //      final zona de conflito
         pthread_create(&thread, NULL, myThread, socket_ptr);
-    }
 
+
+    }
 
     /* Close the local socket */
     close(serverfd);
+    libera_lista();
 
     printf("Connection closed\n\n");
 
-
     return EXIT_SUCCESS;
 }
-
