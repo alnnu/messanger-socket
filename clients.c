@@ -85,12 +85,27 @@ int tamanho_lista(){
     return cont;
 }
 
-struct client *get_client(int fd_client){
+int get_client_fd(int pos){
+    if(li == NULL)
+        return -1;
+    Elem *no = get_client_pos(pos);
+    if(no == NULL)
+        return -1;
+    else{
+        return no->fd;
+    }
+}
+
+
+struct client *get_client_pos(int pos){
+
+    int count = 0;
     if(li == NULL)
         return NULL;
     Elem *no = *li;
-    while(no != NULL && no->fd != fd_client){
+    while(no != NULL && count != pos){
         no = no->prox;
+        count ++;
     }
     if(no == NULL)
         return NULL;

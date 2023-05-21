@@ -12,4 +12,5 @@ int tamanho_lista();
 void libera_lista();
 int add(int, char*);
 int remover(int);
-struct client *get_client(int);
+int get_client_fd(int);
+struct client *get_client_pos(int);

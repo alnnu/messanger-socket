@@ -101,6 +101,41 @@ char *make_msg(char *type, char *text) {
     return msg;
 }
 
+void *buffer_listener(void *ptr) {
+
+
+    while (1) {
+//        while(strlen(buffer) == 0){
+//            printf("comsumidor -- sem nada para comsumir!\n");
+//            sem_wait(&semaforoProdutor);
+//            printf("comsumidor -- comsumidor voltou a funcionar!\n");
+//        }
+        printf("%llu\n", strlen(buffer));
+        if(strlen(buffer) > 0) {
+            int client = get_client_fd(0);
+
+            sem_wait(&mudex);
+
+            int pos = 1;
+
+            while(client != -1) {
+                printf("%d\n",client);
+                send(client, make_msg("msg_servidor",buffer), BUFFER_LENGTH, 0);
+                client = get_client_fd(pos);
+                pos++;
+            }
+
+            memset(buffer, 0x0, BUFFER_LENGTH);
+
+            sem_post(&mudex);
+            sem_post(&semaforoConsumidor);
+
+            sem_post(&semaforoConsumidor);
+        }
+
+    }
+}
+
 
 void *myThread(void *ptr ) {
 
@@ -111,16 +146,6 @@ void *myThread(void *ptr ) {
     char *msg = (char*)malloc(sizeof (char) * BUFFER_LENGTH);
 
     int message_len;
-
-
-    sem_wait(&mudex);
-    strncpy(buffer, "Olá! Seja bem-vindo!\0", BUFFER_LENGTH);
-
-    send(client, make_msg("msg_servidor",buffer), BUFFER_LENGTH, 0);
-
-    sem_post(&mudex);
-
-    sem_post(&semaforoProdutor);
 
     message_len = recv(client, msg, BUFFER_LENGTH, 0);
 
@@ -133,7 +158,10 @@ void *myThread(void *ptr ) {
     client_apelido = (char *) malloc(sizeof (char) * strlen(msg_dados.info));
     strcpy(client_apelido, msg_dados.info);
 
+    printf("sadasda");
+    strncpy(buffer, "Olá! Seja bem-vindo!\0", BUFFER_LENGTH);
     sem_post(&mudex);
+    sem_post(&semaforoConsumidor);
 
     while (1) {
         while(strlen(buffer) == BUFFER_LENGTH){
@@ -161,11 +189,7 @@ void *myThread(void *ptr ) {
 
                 sem_post(&semaforoProdutor);
                 break;
-            } else {
-                send(client, make_msg("msg_servidor",buffer), BUFFER_LENGTH, 0);
-
             }
-
             sem_post(&mudex);
             sem_post(&semaforoProdutor);
 
@@ -188,6 +212,11 @@ void *myThread(void *ptr ) {
  */
 
 int main(void) {
+
+
+    pthread_t comsumidor;
+    pthread_create(&comsumidor, NULL, buffer_listener, NULL);
+
     clients = create_clients_list();
 
     sem_init(&semaforoProdutor, 0, 0);

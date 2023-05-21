@@ -53,7 +53,7 @@ char *msg_server_decoder(char *msg) {
     return msg_return;
 }
 
-void *buffer_in_listner(void *ptr) {
+void *buffer_in_listener(void *ptr) {
     int server = *(int*)ptr;
     char *msg = (char*) malloc(sizeof(char) * LEN);
     while (1){
@@ -81,6 +81,8 @@ char *make_msg(char *type, char *text) {
 
     return msg;
 }
+
+
 
 int main(int argc, char *argv[]) {
     char apelido[100];
@@ -118,11 +120,6 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    /* Receives the presentation message from the server */
-    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
-        buffer_in[slen + 1] = '\0';
-        fprintf(stdout, "Server says: %s\n", msg_server_decoder(buffer_in));
-    }
 
     fprintf(stdout, "apelido: ");
     fgets(apelido, 100, stdin);
@@ -136,6 +133,13 @@ int main(int argc, char *argv[]) {
     /* Sends the read message to the server through the socket */
     send(sockfd, make_msg("usuario_entra", buffer_out), LEN, 0);
 
+    /* Receives the presentation message from the server */
+    if ((slen = recv(sockfd, buffer_in, LEN, 0)) > 0) {
+        buffer_in[slen + 1] = '\0';
+        fprintf(stdout, "Server says: %s\n", msg_server_decoder(buffer_in));
+    }
+
+
     /*
      * Communicate with the server until the exit message come
      */
@@ -146,7 +150,7 @@ int main(int argc, char *argv[]) {
     pthread_t thread;
 
 
-    pthread_create(&thread, NULL, buffer_in_listner, socket_ptr);
+    pthread_create(&thread, NULL, buffer_in_listener, socket_ptr);
     fprintf(stdout, "Say something to the server:\n");
 
     while (true) {
